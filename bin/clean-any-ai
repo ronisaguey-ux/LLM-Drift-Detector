@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# clean-any-ai — Universal multi-AI session cleaner master entrypoint
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+export PYTHONPATH="$PROJECT_ROOT:${PYTHONPATH:-}"
+exec python3 "$PROJECT_ROOT/src/drift_clean/clean_any.py" "$@"

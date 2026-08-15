@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# uninstall_global_hooks.sh — Removes DriftClean global environment hooks
+# uninstall_global_hooks.sh — Removes DriftClean global environment hooks and aliases
 set -euo pipefail
 
-echo "🗑️ Removing DriftClean Global AI Toolchain Hooks..."
+echo "🗑️ Removing DriftClean Global AI Toolchain Hooks & Commands..."
 
 PY_USER_SITE="$(python3 -m site --user-site 2>/dev/null || true)"
 if [ -n "$PY_USER_SITE" ] && [ -f "$PY_USER_SITE/sitecustomize.py" ]; then
     rm -f "$PY_USER_SITE/sitecustomize.py"
     echo "✅ Removed: $PY_USER_SITE/sitecustomize.py"
 fi
+
+rm -f "$HOME/.local/bin/clean-any-ai" "$HOME/.local/bin/clean" "$HOME/.local/bin/autoclean" "$HOME/.local/bin/cleanreframe"
+echo "✅ Removed binaries from ~/.local/bin"
 
 remove_from_file() {
     local target_file="$1"

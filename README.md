@@ -183,6 +183,27 @@ bash scripts/uninstall_global_hooks.sh
 - **Python Startup Hook**: Installs `src/drift_clean/sitecustomize.py` into the user's Python site-packages (`~/.local/lib/pythonX.Y/site-packages`).
 - **Per-Process Overrides**: Set `DRIFT_CLEAN_CONFIG=/path/to/custom_config.json` or disable via `DRIFT_CLEAN_AUTO=0`.
 
+### Universal Multi-AI Commands (`clean-any-ai`, `/clean`, `/autoclean`, `/cleanreframe`)
+
+The cleaning commands operate across all AI tools on your system with automatic runtime and transcript detection:
+
+```bash
+# Run on currently active AI tool (or specified tool)
+clean-any-ai clean
+clean-any-ai autoclean
+clean-any-ai cleanreframe
+
+# Terminal slash command aliases (work in any shell)
+/clean
+/autoclean
+/cleanreframe
+```
+
+- **Claude Code**: Pinpoints active transcript files in `~/.claude/projects/` via `/proc/<pid>/fd`.
+- **Antigravity (AGY)**: Detects transcript logs in `~/.gemini/antigravity-cli/brain/`.
+- **Webchat API**: Detects active exchanges and reports in `audits_plans/drift_reports/`.
+- **Aider / Generic Runtimes**: Sanitizes `.aider.chat.history.md` and local session JSON/JSONL logs.
+
 ## Antigravity-Bridge MCP Server (`src/inbox_mcp/`)
 
 A zero-dependency standard library Model Context Protocol (MCP) server providing bi-directional cross-agent communication between Claude Code and Antigravity:

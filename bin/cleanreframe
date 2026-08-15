@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# /cleanreframe or cleanreframe — Universal cleanreframe wrapper
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec "$SCRIPT_DIR/clean-any-ai" cleanreframe "$@"
