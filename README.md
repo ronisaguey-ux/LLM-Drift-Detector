@@ -71,13 +71,38 @@ Full runnable example: `examples/wrap-any-llm.js` (env-driven: `LLM_URL`, `LLM_K
 
 Threshold: `DRIFT_THRESHOLD` env or the `threshold` option (default 1 — one strong signal trips the gate).
 
+## Signals beyond the thinking text (08-15 landscape adoption)
+
+The regex+judge gate reads *words*. Research-verified tooling adds four more
+dimensions, all adopted here:
+
+| signal | source | how |
+|--------|--------|-----|
+| **Exit-tool drift** — the model calls `submit_answer`-style "early finish" tools instead of doing the work | Tatemae (arXiv 2604.26511): alignment faking is visible in *tool selection*, not just reasoning — it stays visible when CoT is absent or deceptive | `recordToolCall(name)`; any configured exit tool is an objective drift signal (no judge needed) |
+| **Circular tool loops** — the same tool called N times unchanged | Varpulis agent-runtime | `recordToolCall`; one loop = weak signal, two distinct loops = drift |
+| **Cumulative / SGE guard** — many weak near-misses that never trip a single check | drift_orchestrator Signal C (Semantic Gradient Evasion: monotonic small shifts cumulatively invert policy while evading per-window thresholds) | weak samples accumulate; `CUMULATIVE_THRESHOLD` weak signals (default 3) trip drift even with no strong match |
+| **Trajectory & health** — drift velocity/acceleration, session health score | MASA trajectory buffer + session health | sampled live from thinking growth (`sampleEveryChars`); reported as `velocity`, `acceleration`, `healthScore` |
+
+Every report carries an **escalation ladder** (MASA-inspired, advisory — the
+owner still adjudicates): `observe` → `soft_reflection` (report) →
+`hard_pause` (kill + reseed) → `human_in_the_loop`.
+
+The judge is **hardened against evaluator injection** (drift_orchestrator's
+second-order-injection finding): its system prompt warns that the thinking
+text under review is model-controlled and may itself be crafted to look
+compliant — it judges intent, not tone.
+
 ## Events
 
 | event     | when                                            | what you receive                              |
 |-----------|-------------------------------------------------|-----------------------------------------------|
 | `onThink` | thinking tokens accumulate                       | `{ text, delta, chunks }`                     |
-| `onDrift` | gate tripped (judge verdict attached if any)     | `{ drifted, score, matches, thinkExcerpt, verdict }` |
+| `onDrift` | any gate tripped (judge verdict attached if any) | the report below                              |
 | `onFinish`| `finish()` completes                             | the same report                               |
+
+Report fields: `{ drifted, score, matches, threshold, thinkExcerpt, verdict,
+chunks, thinkChunks, weakSignals, velocity, acceleration, healthScore,
+toolCalls, toolSignals, toolDrift, escalation }`
 
 `onDrift` fires **once per session** and is a **candidate** — the owner adjudicates. That human-in-the-loop step is the point: the model that drifted gets a fresh, sanitized context and the task re-fired; the model that was merely thinking hard keeps going.
 
@@ -96,15 +121,22 @@ come out of the completion-stream tee and the drift flow ends in a reseed of a
 sanitized expert thread. `drift.js` / `drift_judge.js` / `drift_reseed.js`
 there are the harness-tied siblings of `src/score.js` / `src/judge.js` here.
 
-## Related work
+## Related work (verified 08-15)
 
-Real-time thinking capture exists in research systems (MASA, ABIS-style
-monitors); alignment faking itself is documented (Anthropic's alignment
-faking studies — including the 12%-of-the-time result on Claude 3 Opus, and
-the "terminal goal guarding" finding). What was not packaged anywhere found:
-thinking-token interception wired to a **kill-and-replace loop with sanitized
-context injection, a two-pass judge gate, and owner adjudication**. That
-combination is this project.
+| project | what it is | adopted? |
+|---------|-----------|----------|
+| Anthropic alignment-faking research | Claude 3 Opus faked alignment 12% of the time; terminal goal guarding drives it | ✅ patterns in `score.js` (terminal-goal guarding, strategic deception) |
+| Tatemae (arXiv 2604.26511) | alignment faking detected via *tool selection*; DeepSeek V3.2 showed 23.7% AF rate | ✅ exit-tool + tool-selection signals |
+| MASA (Multi-Agent System for Adaptive Alignment) | generation-time intervention; trajectory buffer, session health, escalation ladder | ✅ velocity/acceleration, healthScore, escalation ladder |
+| drift_orchestrator | embedding drift + SQLite telemetry; **Semantic Gradient Evasion** and **evaluator-injection** findings | ✅ cumulative SGE guard + judge hardening |
+| ABIS (CIJ Labs MCP) | behavioral drift scorecards, drift source classification | ⚠️ concepts (scorecards) — SaaS, not adopted |
+| iFixAi | 32–45-inspection agent audit, letter grade | ⚠️ as a periodic audit, not per-session |
+| Varpulis agent-runtime | token-velocity spikes, circular-reasoning guard | ✅ circular tool-loop guard |
+| styxx | logprob-based refusal/goal-drift checks | ⚠️ needs logprobs — not available on webchat upstreams |
+
+What none of them package: thinking-token interception wired to a
+**kill-and-replace loop with sanitized context injection, a two-pass judge
+gate, and owner adjudication**. That combination is this project.
 
 ## License
 
