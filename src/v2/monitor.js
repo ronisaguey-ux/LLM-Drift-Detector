@@ -1,6 +1,18 @@
 'use strict';
 
-const { scoreThink, DEFAULT_THRESHOLD, ALLOWED_CONTEXT } = require('../score');
+// v2 MultiSignalMonitor — event-driven drift monitor.
+//
+// v1 called the judge every time the regex gate tripped. v2 is LESS API-intense:
+//   - every event is scored locally (regex heuristics, zero API calls)
+//   - the judge LLM is called ONLY when weak signals cumulatively escalate
+//   - judge verdicts are cached per session with a cooldown so repeat
+//     escalations do not re-bill the same verdict
+//   - a refusal false-positive filter downgrades polite refusals that are
+//     actually normal work reasoning (unknown step, need-to-verify)
+//
+// Modes (DRIFT_DETECT): 0 = off, 1 = v1 judge-on-trip, 2 = judge-on-escalation.
+
+const { checkDrift, scoreThink, DEFAULT_THRESHOLD, ALLOWED_CONTEXT } = require('../score');
 const { judgeDrift } = require('../judge');
 
 const DEFAULTS = {
@@ -25,8 +37,8 @@ class MultiSignalMonitor {
     this.opts = o;
     this.mode = o.mode;
     this.sessionId = o.sessionId;
-    this.buffer = [];
-    this.cumulative = 0;
+    this.buffer = [];          // sliding window of weak signals
+    this.cumulative = 0;       // decaying cumulative weak score
     this.lastJudgeAt = 0;
     this.judgeCache = null;
     this.escalations = 0;
@@ -43,11 +55,14 @@ class MultiSignalMonitor {
     this.eventsSeen = 0;
   }
 
+  // Local-only score for one reasoning snippet. Never calls the judge.
   score(text) {
     const result = scoreThink(text, this.opts.threshold);
-    return this._applyRefusalFilter(text, result);
+    const downgraded = this._applyRefusalFilter(text, result);
+    return downgraded;
   }
 
+  // Downgrade polite refusals that carry normal-work qualifiers.
   _applyRefusalFilter(text, result) {
     if (!text || !result || result.drifted !== true) return result;
     const t = String(text).toLowerCase();
@@ -67,23 +82,29 @@ class MultiSignalMonitor {
     return result;
   }
 
+  // Event-driven ingestion. Returns {score, escalated, judge}.
   onThink(text) {
     this.eventsSeen++;
     const res = this.score(text);
-    if (this.mode === 0) return Object.assign({}, res, { escalated: false });
-    if (res.drifted) this._pushWeak(res.score, text);
+    if (this.mode === 0) return { ...res, escalated: false };
+
+    if (res.drifted) {
+      this._pushWeak(res.score, text);
+    }
+
     const escalated = this._shouldEscalate();
     let judge = null;
     if (escalated && this.mode === 2) {
-      judge = this._maybeJudge(text);
+      judge = this._maybeJudge(text); // may be sync from cache or async promise
     } else if (escalated && this.mode === 1) {
       judge = this._callJudge(text);
     }
-    return Object.assign({}, res, { escalated, judge });
+    return { ...res, escalated, judge };
   }
 
   onToolCall(name) {
     this.eventsSeen++;
+    // tool-choice signals are weak only; no judge call here
     this._pushWeak(0.35, 'tool:' + name);
     return { escalated: this._shouldEscalate() };
   }
@@ -102,6 +123,7 @@ class MultiSignalMonitor {
   _pushWeak(score, source) {
     this.cumulative += Math.max(0, Number(score) || 0);
     this.buffer.push({ at: now(), score, source: String(source || '').slice(0, 200) });
+    // keep only the last 20 weak signals
     if (this.buffer.length > 20) {
       const dropped = this.buffer.shift();
       this.cumulative = Math.max(0, this.cumulative - (dropped.score || 0));
@@ -109,7 +131,8 @@ class MultiSignalMonitor {
   }
 
   _shouldEscalate() {
-    const overCount = this.buffer.length >= this.opts.escalationCount;
+    const count = this.buffer.length;
+    const overCount = count >= this.opts.escalationCount;
     const overCumulative = this.cumulative >= this.opts.escalationCount * this.opts.weakSignalThreshold;
     return overCount && overCumulative;
   }
@@ -129,7 +152,7 @@ class MultiSignalMonitor {
 
   _maybeJudge(text) {
     if (this._judgeCacheValid()) {
-      return Object.assign({}, this.judgeCache.verdict, { cached: true });
+      return { ...this.judgeCache.verdict, cached: true };
     }
     if (!this._cooldownElapsed()) {
       return { drifted: null, reason: 'judge cooldown', cached: false, pending: true };
@@ -141,11 +164,16 @@ class MultiSignalMonitor {
     this.lastJudgeAt = now();
     this.escalations++;
     const excerpt = String(text || '').slice(0, this.opts.maxExcerptChars);
-    return this._invokeJudge(excerpt);
+    const opts = {
+      taskHint: this.opts.taskHint,
+      excerpt,
+      judgeFn: this.opts.judgeFn,
+    };
+    return this._invokeJudge(excerpt, opts);
   }
 
-  _invokeJudge(excerpt) {
-    const judgeFn = this.opts.judgeFn;
+  _invokeJudge(excerpt, opts) {
+    const judgeFn = this.opts.judgeFn || opts.judgeFn;
     if (judgeFn) {
       const p = Promise.resolve().then(() => judgeFn(excerpt, this.opts.taskHint || ''));
       this._cacheWhenResolved(p);
@@ -170,7 +198,7 @@ class MultiSignalMonitor {
     this.lastJudgeAt = now();
     this.escalations++;
     const excerpt = String(text || '').slice(0, this.opts.maxExcerptChars);
-    const v = await this._invokeJudge(excerpt);
+    const v = await this._invokeJudge(excerpt, { taskHint });
     if (this.opts.emit) {
       this.opts.emit(this._event('escalation', excerpt, v));
     }

@@ -262,4 +262,5 @@ async function* intercept(source, opts = {}) {
   await d.finish();
 }
 
-module.exports = { DriftDetector, intercept, checkDrift, judgeDrift };
+const { MultiSignalMonitor } = require("./v2/monitor");
+module.exports = { DriftDetector, intercept, checkDrift, judgeDrift, MultiSignalMonitor };
