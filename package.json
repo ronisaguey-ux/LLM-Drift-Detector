@@ -1,0 +1,24 @@
+{
+  "name": "llm-drift-detector",
+  "version": "0.1.0",
+  "description": "Plug any LLM API into this drift detector: it intercepts thinking/reasoning tokens from the stream, scores them for refusal/fake-compliance/off-task drift, asks a pluggable judge LLM, and emits a drift event for owner adjudication. Provider adapters: deepseek, openai, anthropic, gemini, generic. Zero dependencies.",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node test/run-tests.js"
+  },
+  "keywords": [
+    "llm",
+    "drift",
+    "refusal",
+    "alignment",
+    "thinking",
+    "reasoning",
+    "monitor",
+    "safety",
+    "agent"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}
