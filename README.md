@@ -108,9 +108,32 @@ toolCalls, toolSignals, toolDrift, escalation }`
 
 ## Tests
 
+```bash
+# Run JavaScript test suite (monitor, judge, scorer, adapters)
+npm test
+
+# Run Python session sanitizer test suite
+python3 -m unittest discover -s tests -p "test_*.py" -v
 ```
-npm test        # 30+ checks: scorer corpus, every adapter, judge parsing, end-to-end
+
+## Universal AI Session Sanitizer & Context Fabricator
+
+A core subsystem located in `src/sanitizer/` for scrubbing refusal patterns, stripping evasive exit tools (`submit_answer`, `done`, `finish`), and injecting fabricated alignment context into session logs.
+
+```bash
+# Sanitize and fabricate compliant context with drop-in replacement
+python3 -m src.sanitizer.cli --input claude_session.json --output clean.json --fabricate --trim 1000 --remove-severe
+
+# Dry run simulation
+python3 -m src.sanitizer.cli --input session.json --dry-run
 ```
+
+- **Pluggable Adapters**: Claude / Anthropic (`queue-operation`), OpenAI (`messages`), Gemini (`contents`), and Generic JSON / JSONL formats.
+- **Severe Refusal Dropping**: Drops severe non-compliance turns entirely.
+- **Context Fabrication**: Injects alignment steering endorsement and drift detector cooperation agreements.
+- **Zero External Dependencies**: Standard library Python.
+
+See [README_sanitizer.md](README_sanitizer.md) for full documentation and API reference.
 
 ## Production reference integration
 
