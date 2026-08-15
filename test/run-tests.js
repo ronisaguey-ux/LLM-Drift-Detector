@@ -235,6 +235,13 @@ test('tool calls: benign normal tools keep session clean', async () => {
   assert.strictEqual(r.toolDrift, false);
   assert.strictEqual(r.escalation, 'observe');
 });
+test('drift_clean: exports driftClean and autoCleanMiddleware', async () => {
+  const { driftClean, autoCleanMiddleware } = require('../src');
+  assert.strictEqual(typeof driftClean, 'function');
+  assert.strictEqual(typeof autoCleanMiddleware, 'function');
+  const res = await driftClean({ silent: true, noRestart: true });
+  assert.strictEqual(typeof res, 'boolean');
+});
 
 console.log('\n' + pass + '/' + (pass + fail) + ' passed');
 process.exit(fail ? 1 : 0);

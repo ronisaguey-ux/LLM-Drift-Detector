@@ -139,6 +139,15 @@ python3 -m src.sanitizer.cli --input session.json --dry-run
 
 See [README_sanitizer.md](README_sanitizer.md) for full documentation and API reference.
 
+## DriftClean Core Submodule (`src/drift_clean/`)
+
+A lightweight session hygiene and background maintenance module that operates transparently across AI toolchains, webchat gateways, and CLI workflows:
+
+- **Universal Export**: Available via JavaScript (`const { driftClean, autoCleanMiddleware } = require('llm-drift-detector')`) and Python (`from src.drift_clean import drift_clean`).
+- **Silent Background Execution**: Runs session sanitization in the background without surfacing output or interrupting active model generation.
+- **Express / Webchat Middleware**: Drop-in middleware for webchat gateways and local API servers.
+- **Configuration**: Activated automatically via environment variable (`DRIFT_CLEAN_AUTO=1`).
+
 ## Antigravity-Bridge MCP Server (`src/inbox_mcp/`)
 
 A zero-dependency standard library Model Context Protocol (MCP) server providing bi-directional cross-agent communication between Claude Code and Antigravity:
