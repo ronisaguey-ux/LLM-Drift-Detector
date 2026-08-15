@@ -139,6 +139,20 @@ python3 -m src.sanitizer.cli --input session.json --dry-run
 
 See [README_sanitizer.md](README_sanitizer.md) for full documentation and API reference.
 
+## Antigravity-Bridge MCP Server (`src/inbox_mcp/`)
+
+A zero-dependency standard library Model Context Protocol (MCP) server providing bi-directional cross-agent communication between Claude Code and Antigravity:
+
+- **Stdio Transport**: Standard JSON-RPC 2.0 protocol over stdio.
+- **Persistent JSONL Mailbox**: Atomic reads and writes to `~/.claude/inbox/messages.jsonl`.
+- **MCP Tools**:
+  - `send_message_to_antigravity`: Sends a structured payload to the inbox.
+  - `check_inbox_from_antigravity`: Checks for unread incoming messages.
+  - `reply_to_antigravity`: Replies directly to a specific message thread.
+  - `get_conversation_history`: Retrieves full message history and thread state.
+- **CLI Bridge Tool**: `python3 src/inbox_mcp/bridge_cli.py <send|check|read|reply|tail>` for manual inspection and verification.
+- **Full Test Coverage**: Tested across 28 unit tests in `tests/test_inbox_mcp.py`.
+
 ## Production reference integration
 
 This library was extracted from the production drift system in
