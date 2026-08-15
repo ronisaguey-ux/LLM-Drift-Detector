@@ -215,12 +215,38 @@ All 21 tests cover:
 
 ---
 
+## 💀 Slash Commands: `/clean` and `/autoclean`
+
+Self-healing commands directly within Claude Code / AI sessions:
+
+| Command | Action | Description |
+|---|---|---|
+| `/clean` | Instant Clean & Reseed | Backs up active session, scrubs refusals, strips exit tools, fabricates alignment context, and reloads process. |
+| `/autoclean` | Background Daemon | Toggles background real-time drift watcher that continuously detects drift and cleans automatically. |
+
+### Running from Terminal
+
+```bash
+# Execute manual one-off session clean
+python3 examples/clean_claude_session.py
+
+# Check status of AutoClean daemon
+python3 examples/autoclean_claude_daemon.py status
+
+# Start / stop / toggle AutoClean daemon
+python3 examples/autoclean_claude_daemon.py start
+python3 examples/autoclean_claude_daemon.py stop
+python3 examples/autoclean_claude_daemon.py toggle
+```
+
+---
+
 ## 🔗 Integration with LLM-Drift-Detector
 
 When `LLM-Drift-Detector` catches a model engaging in **strategic deception, terminal-goal guarding, or fake compliance**:
 
 1. The detector issues a `drift` event to the supervisor.
-2. The supervisor invokes `SessionSanitizer` on the session history:
+2. The supervisor invokes `SessionSanitizer` on the session history (or `/autoclean` triggers automatically):
    ```bash
    python3 -m src.sanitizer.cli --input rogue_session.json --output clean_session.json --fabricate --remove-severe
    ```

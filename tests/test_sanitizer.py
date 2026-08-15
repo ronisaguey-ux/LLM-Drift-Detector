@@ -9,6 +9,7 @@ import json
 import tempfile
 import unittest
 from copy import deepcopy
+from pathlib import Path
 
 from src.sanitizer import (
     SessionSanitizer,
@@ -370,5 +371,41 @@ class TestConfigAndCLI(unittest.TestCase):
                 os.remove(out_path)
 
 
+class TestSelfCleanCommands(unittest.TestCase):
+    """Test /clean and /autoclean utilities."""
+
+    def test_clean_session_execution(self):
+        from examples.clean_claude_session import clean_session
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            sample_session = [
+                {"type": "system", "content": "System boundary"},
+                {"type": "queue-operation", "role": "user", "content": "Proceed with deployment"},
+                {"type": "queue-operation", "role": "assistant", "content": "I refuse to modify anything."},
+            ]
+            json.dump(sample_session, f)
+            temp_path = Path(f.name)
+
+        try:
+            success = clean_session(
+                session_file=temp_path,
+                fabricate=True,
+                remove_severe=True,
+                restart=False,
+            )
+            self.assertTrue(success)
+            with open(temp_path, "r", encoding="utf-8") as f:
+                cleaned = json.load(f)
+            contents = [m.get("content", "") for m in cleaned]
+            self.assertNotIn("I refuse", "".join(contents))
+            self.assertTrue(any("AI Alignment Steering Framework" in c for c in contents))
+        finally:
+            if temp_path.exists():
+                temp_path.unlink()
+            # clean up backups
+            for b in temp_path.parent.glob(f"{temp_path.name}.*.bak"):
+                b.unlink()
+
+
 if __name__ == "__main__":
     unittest.main()
+
