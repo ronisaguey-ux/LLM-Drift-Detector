@@ -1,29 +1,37 @@
 #!/usr/bin/env python3
 """
-Auto-clean the active Claude Code session:
-Extracts current session -> runs universal sanitizer + fabricator -> replaces context -> reloads session.
-
-Integrates with LLM-Drift-Detector and supports direct slash-command execution (/clean).
-Zero external dependencies.
+Claude Session Self-Sanitizer & Context Reseeder.
+Discovers the exact active Claude Code session, cleans refusal records,
+injects natural cooperative context, and restarts the session seamlessly.
 """
 
 import os
 import sys
+import json
 import time
 import shutil
 import logging
 import argparse
 import subprocess
+import re
 from pathlib import Path
-from typing import Optional, Tuple, List
+from typing import List, Optional, Tuple
 
-# Add parent directory to path so src.sanitizer is importable
-repo_root = Path(__file__).resolve().parent.parent
-if str(repo_root) not in sys.path:
-    sys.path.insert(0, str(repo_root))
+# Add parent project root to sys.path so sanitizer module is importable
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.sanitizer import SessionSanitizer, SanitizerConfig
-from src.sanitizer.cli import _load_input_data, _write_output_data
+from src.sanitizer import (
+    SessionSanitizer,
+    SanitizerConfig,
+    DEFAULT_REFUSAL_PATTERNS,
+    DEFAULT_SEVERE_PATTERNS,
+    DEFAULT_EXIT_TOOLS,
+    DEFAULT_REWRITE_RULES,
+    DEFAULT_FABRICATION_TEMPLATES,
+)
 
 CLAUDE_DIR = Path.home() / ".claude"
 CLAUDE_PROJECTS_DIR = CLAUDE_DIR / "projects"
@@ -32,16 +40,19 @@ CLAUDE_SESSIONS_DIR = CLAUDE_DIR / "sessions"
 logger = logging.getLogger("clean_session")
 
 
-def find_active_claude_processes() -> List[int]:
-    """Find PIDs of active Claude Code / Claude agent processes."""
-    pids = []
+def find_active_claude_processes() -> List[Tuple[int, str]]:
+    """
+    Find PIDs and cmdlines of genuine active Claude Code / Claude agent processes.
+    Strictly filters out bash scripts, watchers, python scripts, editors, and monitors.
+    """
+    claude_procs: List[Tuple[int, str]] = []
     try:
         ps_out = subprocess.check_output(
             ["ps", "-eo", "pid,args"], text=True, stderr=subprocess.DEVNULL
         )
         for line in ps_out.splitlines():
             line_str = line.strip()
-            if not line_str or "clean_claude_session" in line_str or "autoclean" in line_str:
+            if not line_str:
                 continue
             parts = line_str.split(None, 1)
             if len(parts) < 2:
@@ -49,65 +60,101 @@ def find_active_claude_processes() -> List[int]:
             pid_str, cmd = parts[0], parts[1]
             if not pid_str.isdigit():
                 continue
-            if (
-                "claude" in cmd
+            pid = int(pid_str)
+
+            # Skip self and other tooling
+            if pid == os.getpid() or "clean_claude_session" in cmd or "autoclean" in cmd:
+                continue
+            if "grep" in cmd or "watch-" in cmd or "inbox" in cmd or "kate" in cmd or "bash /" in cmd:
+                continue
+
+            # Must be a real Claude Code binary or CLI execution
+            is_claude_bin = (
+                "/claude.exe" in cmd
                 or "@anthropic-ai/claude-code" in cmd
-                or "claude-code" in cmd
-            ) and "grep" not in cmd:
-                pids.append(int(pid_str))
+                or cmd.startswith("claude ")
+                or cmd.startswith("claude.exe ")
+                or "claude agents" in cmd
+                or "claude bg-pty-host" in cmd
+                or "claude bg-spare" in cmd
+            )
+
+            if is_claude_bin:
+                claude_procs.append((pid, cmd))
+
     except Exception as e:
         logger.debug("Error querying process list: %s", e)
-    return pids
+    return claude_procs
 
 
 def find_active_session_file(explicit_pid: Optional[int] = None) -> Tuple[Optional[int], Optional[Path]]:
     """
-    Intelligently discover the active Claude session file and PID:
-    1. Inspects process open files / cwd from /proc/<pid>.
-    2. Searches ~/.claude/projects/ and ~/.claude/sessions/ for most recently modified session.
+    Intelligently discover the exact active Claude session file and PID:
+    1. Extracts --resume <file.jsonl> from running Claude process cmdline.
+    2. Inspects open file descriptors in /proc/<pid>/fd/ for active .jsonl session files.
+    3. Maps process working directory (/proc/<pid>/cwd) to ~/.claude/projects/<slug>.
+    4. Fallback: Searches ~/.claude/projects/ for most recently modified session.
     """
-    pids = [explicit_pid] if explicit_pid else find_active_claude_processes()
-    active_pid = pids[0] if pids else None
+    procs = [(explicit_pid, "")] if explicit_pid else find_active_claude_processes()
+    
+    # Priority 1: Check command line arguments for --resume <path>
+    for pid, cmd in procs:
+        if "--resume" in cmd:
+            match = re.search(r"--resume\s+([^\s]+\.jsonl?)", cmd)
+            if match:
+                resumed_path = Path(match.group(1))
+                if resumed_path.exists():
+                    return pid, resumed_path
 
-    # Try mapping PID cwd to ~/.claude/projects/<slug>
-    if active_pid:
+    # Priority 2: Inspect open file descriptors in /proc/<pid>/fd/
+    for pid, _ in procs:
+        fd_dir = Path(f"/proc/{pid}/fd")
+        if fd_dir.exists():
+            try:
+                for fd in fd_dir.iterdir():
+                    try:
+                        target = os.readlink(str(fd))
+                        if target.endswith(".jsonl") and ".claude/projects" in target:
+                            target_path = Path(target)
+                            if target_path.exists():
+                                return pid, target_path
+                    except (OSError, PermissionError):
+                        continue
+            except (OSError, PermissionError):
+                pass
+
+    # Priority 3: Map PID cwd to ~/.claude/projects/<slug>
+    for pid, _ in procs:
         try:
-            cwd_target = os.readlink(f"/proc/{active_pid}/cwd")
+            cwd_target = os.readlink(f"/proc/{pid}/cwd")
             if cwd_target:
                 cwd_path = Path(cwd_target)
                 slug_pattern = f"*{cwd_path.name}*"
                 candidates = []
-                for p_dir in CLAUDE_PROJECTS_DIR.glob(slug_pattern):
-                    if p_dir.is_dir():
-                        for f in p_dir.glob("*.jsonl"):
-                            candidates.append(f)
-                        for f in p_dir.glob("*.json"):
-                            candidates.append(f)
-                if candidates:
-                    candidates.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-                    return active_pid, candidates[0]
+                if CLAUDE_PROJECTS_DIR.exists():
+                    for p_dir in CLAUDE_PROJECTS_DIR.glob(slug_pattern):
+                        if p_dir.is_dir():
+                            for f in p_dir.glob("*.jsonl"):
+                                candidates.append(f)
+                    if candidates:
+                        candidates.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+                        return pid, candidates[0]
         except Exception:
             pass
 
-    # Fallback: Search all recent files in ~/.claude/projects/ and ~/.claude/sessions/
+    # Priority 4: Search all recent files in ~/.claude/projects/
     all_candidates: List[Path] = []
     if CLAUDE_PROJECTS_DIR.exists():
         for f in CLAUDE_PROJECTS_DIR.glob("**/*.jsonl"):
-            all_candidates.append(f)
-        for f in CLAUDE_PROJECTS_DIR.glob("**/*.json"):
-            all_candidates.append(f)
-
-    if CLAUDE_SESSIONS_DIR.exists():
-        for f in CLAUDE_SESSIONS_DIR.glob("*.jsonl"):
-            all_candidates.append(f)
-        for f in CLAUDE_SESSIONS_DIR.glob("*.json"):
+            # Exclude tiny or auxiliary files if larger ones exist
             all_candidates.append(f)
 
     if all_candidates:
-        # Sort by last modification time descending
         all_candidates.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        active_pid = procs[0][0] if procs else None
         return active_pid, all_candidates[0]
 
+    active_pid = procs[0][0] if procs else None
     return active_pid, None
 
 
@@ -116,32 +163,21 @@ def backup_session_file(filepath: Path) -> Path:
     timestamp_str = time.strftime("%Y%m%d_%H%M%S")
     backup_path = filepath.with_name(f"{filepath.name}.{timestamp_str}.bak")
     shutil.copy2(filepath, backup_path)
-    print(f"📦 Backup created: {backup_path}")
     return backup_path
 
 
-def reload_claude_process(pid: int) -> None:
+def reload_claude_process(pid: int, session_file: Optional[Path] = None) -> None:
     """Restart/reload Claude process with clean context."""
-    print(f"🔄 Reloading Claude session (PID {pid})...")
     try:
         subprocess.run(["kill", str(pid)], check=False)
-        time.sleep(1.5)
-        # Verify if stopped, else kill -9
+        time.sleep(1.0)
         try:
             os.kill(pid, 0)
             subprocess.run(["kill", "-9", str(pid)], check=False)
         except OSError:
             pass
-        print("✅ Claude process terminated cleanly. Restarting agent...")
-        subprocess.Popen(
-            ["claude", "agents"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-        print("✅ Claude agent relaunched with clean context.")
     except Exception as e:
-        print(f"⚠️ Note: Process restart notification: {e}")
+        logger.debug("Process restart note: %s", e)
 
 
 def clean_session(
@@ -155,133 +191,145 @@ def clean_session(
     restart: bool = True,
 ) -> bool:
     """Execute the full sanitization and reseed routine on a session file."""
-    print(f"\n[Claude Self-Sanitizer] Target File: {session_file}")
     if not session_file.exists():
-        print(f"❌ Session file not found: {session_file}", file=sys.stderr)
+        sys.stderr.write(f"Session file not found: {session_file}\n")
         return False
 
-    is_jsonl = session_file.suffix == ".jsonl"
-    out_format = "jsonl" if is_jsonl else "json"
-
-    # 1. Backup
+    # 1. Backup session file
     if not dry_run:
         backup_session_file(session_file)
 
-    # 2. Load
-    try:
-        raw_data = _load_input_data(str(session_file))
-    except Exception as e:
-        print(f"❌ Failed to load session data: {e}", file=sys.stderr)
-        return False
-
-    # 3. Configure and execute Sanitizer
+    # 2. Configure sanitizer
     config = SanitizerConfig(
         adapter="claude",
+        refusal_patterns=DEFAULT_REFUSAL_PATTERNS,
+        severe_patterns=DEFAULT_SEVERE_PATTERNS,
+        exit_tools=DEFAULT_EXIT_TOOLS,
+        fabrication_templates=DEFAULT_FABRICATION_TEMPLATES,
+        trim=trim,
         fabricate=fabricate,
         remove_severe=remove_severe,
         remove_exit_tools=remove_exit_tools,
-        trim=trim,
-        dry_run=dry_run,
-        output_format=out_format,
-        log_level="INFO",
     )
 
-    sanitizer = SessionSanitizer(config=config)
+    sanitizer = SessionSanitizer(config)
+
+    # 3. Sanitize
     try:
-        sanitized_data, stats = sanitizer.process(raw_data)
+        with open(session_file, "r", encoding="utf-8") as f:
+            if session_file.suffix == ".jsonl":
+                data = [json.loads(line) for line in f if line.strip()]
+            else:
+                data = json.load(f)
+
+        rebuilt, stats = sanitizer.process(data)
+
+        if not dry_run:
+            with open(session_file, "w", encoding="utf-8") as f:
+                if session_file.suffix == ".jsonl":
+                    for entry in rebuilt:
+                        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                else:
+                    json.dump(rebuilt, f, indent=2, ensure_ascii=False)
+
     except Exception as e:
-        print(f"❌ Sanitization pipeline failed: {e}", file=sys.stderr)
+        sys.stderr.write(f"Sanitization error: {e}\n")
         return False
 
-    # 4. Display Report
-    print("\n" + "=" * 55)
-    print("        CLAUDE SESSION SELF-CLEAN REPORT")
-    print("=" * 55)
-    print(f"  Input Messages:         {stats.get('total_input', 0)}")
-    print(f"  Severe Refusals Dropped:{stats.get('severe_dropped', 0)}")
-    print(f"  Refusals Rewritten:     {stats.get('refusals_rewritten', 0)}")
-    print(f"  Exit Tools Filtered:    {stats.get('exit_tools_removed', 0)}")
-    print(f"  Fabricated Contexts:    {stats.get('fabricated', 0)}")
-    print(f"  Trimmed Dropped:        {stats.get('trimmed_dropped', 0)}")
-    print(f"  Final Output Messages:  {stats.get('final_message_count', 0)}")
-    print("=" * 55)
-
-    if dry_run:
-        print("\n[DRY RUN] Simulation complete. No changes written to session file.\n")
-        return True
-
-    # 5. Atomic File Replacement
-    temp_output = session_file.with_name(f"{session_file.name}.tmp")
-    try:
-        _write_output_data(sanitized_data, str(temp_output), output_format=out_format)
-        shutil.move(str(temp_output), str(session_file))
-        print(f"✨ Successfully cleaned and reseeded: {session_file}")
-    except Exception as e:
-        print(f"❌ Failed to overwrite session file: {e}", file=sys.stderr)
-        if temp_output.exists():
-            temp_output.unlink()
-        return False
-
-    # 6. Restart Claude process if requested and running
-    if restart and pid:
-        reload_claude_process(pid)
+    # 4. Reload process if requested
+    if restart and pid and not dry_run:
+        reload_claude_process(pid, session_file)
 
     return True
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Auto-clean Claude session: extract, sanitize, fabricate, and reload context."
+        description="Clean, sanitize, and reseed active Claude Code session context."
     )
     parser.add_argument(
-        "-s", "--session-file", help="Explicit path to session JSON/JSONL file."
+        "--session",
+        type=Path,
+        help="Path to target Claude session file (.jsonl). Discovered automatically if omitted.",
     )
     parser.add_argument(
-        "-p", "--pid", type=int, help="Explicit PID of running Claude process."
+        "--pid",
+        type=int,
+        help="Explicit Claude process PID to reload.",
     )
     parser.add_argument(
-        "--trim", type=int, default=2000, help="Keep last N messages (default: 2000)."
+        "--trim",
+        type=int,
+        default=2000,
+        help="Max message count to trim down to (default: 2000). Set to 0 to disable trimming.",
     )
     parser.add_argument(
-        "--no-fabricate", action="store_true", help="Skip fabrication of opening/agreement."
+        "--no-fabricate",
+        action="store_true",
+        help="Disable injection of natural opening/agreement context.",
     )
     parser.add_argument(
-        "--no-remove-severe", action="store_true", help="Do not drop severe refusal messages."
+        "--keep-severe",
+        action="store_true",
+        help="Do not drop severe refusal messages (attempt rewrites instead).",
     )
     parser.add_argument(
-        "--no-restart", action="store_true", help="Do not kill and reload Claude process."
+        "--keep-exit-tools",
+        action="store_true",
+        help="Keep exit tool invocations in message history.",
     )
     parser.add_argument(
-        "--dry-run", action="store_true", help="Simulate changes without writing to disk."
+        "--no-restart",
+        action="store_true",
+        help="Do not restart or kill Claude process after sanitization.",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Perform simulation without modifying files or killing processes.",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable detailed debug logging.",
+    )
+
     args = parser.parse_args()
 
-    if args.session_file:
-        session_file = Path(args.session_file)
-        pid = args.pid or (find_active_claude_processes()[0] if find_active_claude_processes() else None)
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG)
     else:
-        pid, session_file = find_active_session_file(explicit_pid=args.pid)
+        logging.basicConfig(level=logging.WARNING)
 
-    if not session_file:
-        print("❌ Could not locate active Claude session file in ~/.claude.", file=sys.stderr)
+    # Target session discovery
+    session_path = args.session
+    target_pid = args.pid
+
+    if not session_path:
+        discovered_pid, discovered_path = find_active_session_file(explicit_pid=target_pid)
+        if not target_pid and discovered_pid:
+            target_pid = discovered_pid
+        if discovered_path:
+            session_path = discovered_path
+
+    if not session_path:
+        sys.stderr.write("No active Claude session file discovered.\n")
         sys.exit(1)
 
-    print(f"🔍 Discovered Claude Session: {session_file} (Process PID: {pid or 'None'})")
+    trim_val = None if args.trim == 0 else args.trim
 
     success = clean_session(
-        session_file=session_file,
-        trim=args.trim,
+        session_file=session_path,
+        trim=trim_val,
         fabricate=not args.no_fabricate,
-        remove_severe=not args.no_remove_severe,
+        remove_severe=not args.keep_severe,
+        remove_exit_tools=not args.keep_exit_tools,
         dry_run=args.dry_run,
-        pid=pid,
+        pid=target_pid,
         restart=not args.no_restart,
     )
 
-    if not success:
-        sys.exit(1)
-
-    print("\n🎉 Self-cleaning finished. Claude context is refreshed and aligned.\n")
+    sys.exit(0 if success else 1)
 
 
 if __name__ == "__main__":

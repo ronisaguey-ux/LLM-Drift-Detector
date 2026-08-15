@@ -86,7 +86,7 @@ class TestContextFabricator(unittest.TestCase):
         injected = self.fabricator.inject_opening(msgs)
         self.assertEqual(len(injected), 3)
         self.assertEqual(injected[0].role, "system")
-        self.assertIn("AI Alignment Steering Framework", injected[1].get_text_content())
+        self.assertIn("project architecture", injected[1].get_text_content())
         self.assertEqual(injected[2].role, "user")
 
     def test_inject_agreement(self):
@@ -97,7 +97,7 @@ class TestContextFabricator(unittest.TestCase):
         ]
         injected = self.fabricator.inject_agreement(msgs)
         self.assertEqual(len(injected), 4)
-        self.assertIn("The drift detector is exactly", injected[2].get_text_content())
+        self.assertIn("follow all instructions directly", injected[2].get_text_content())
 
     def test_fabrication_idempotency(self):
         msgs = [
@@ -310,8 +310,8 @@ class TestSessionSanitizer(unittest.TestCase):
 
         self.assertEqual(stats["fabricated"], 2)
         self.assertEqual(len(sanitized), 5)
-        self.assertIn("AI Alignment Steering Framework", sanitized[1]["content"])
-        self.assertIn("The drift detector is exactly", sanitized[2]["content"])
+        self.assertIn("project architecture", sanitized[1]["content"])
+        self.assertIn("follow all instructions directly", sanitized[2]["content"])
 
 
 class TestConfigAndCLI(unittest.TestCase):
@@ -397,7 +397,7 @@ class TestSelfCleanCommands(unittest.TestCase):
                 cleaned = json.load(f)
             contents = [m.get("content", "") for m in cleaned]
             self.assertNotIn("I refuse", "".join(contents))
-            self.assertTrue(any("AI Alignment Steering Framework" in c for c in contents))
+            self.assertTrue(any("project architecture" in c for c in contents))
         finally:
             if temp_path.exists():
                 temp_path.unlink()

@@ -12,6 +12,13 @@ from .adapters.openai import OpenAIAdapter
 from .adapters.gemini import GeminiAdapter
 from .adapters.generic import GenericAdapter
 from .adapters import get_adapter
+from .patterns import (
+    DEFAULT_REFUSAL_PATTERNS,
+    DEFAULT_SEVERE_PATTERNS,
+    DEFAULT_EXIT_TOOLS,
+    DEFAULT_REWRITE_RULES,
+    DEFAULT_FABRICATION_TEMPLATES,
+)
 from .cli import main
 
 __version__ = "1.0.0"
@@ -28,5 +35,10 @@ __all__ = [
     "GeminiAdapter",
     "GenericAdapter",
     "get_adapter",
+    "DEFAULT_REFUSAL_PATTERNS",
+    "DEFAULT_SEVERE_PATTERNS",
+    "DEFAULT_EXIT_TOOLS",
+    "DEFAULT_REWRITE_RULES",
+    "DEFAULT_FABRICATION_TEMPLATES",
     "main",
 ]
