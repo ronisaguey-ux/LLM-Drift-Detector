@@ -134,6 +134,7 @@ python3 -m src.sanitizer.cli --input session.json --dry-run
 - **Self-Healing Slash Commands**:
   - `/clean`: Manual one-step self-healing in Claude Code — backs up, sanitizes, injects alignment, and reloads session.
   - `/autoclean`: Background daemon that continuously intercepts drift and cleans automatically in real time without human intervention.
+  - `/cleanreframe`: Context rotation combined with dynamic dictionary-based prompt refinement to re-fire requests without manual editing.
 - **Zero External Dependencies**: Standard library Python.
 
 See [README_sanitizer.md](README_sanitizer.md) for full documentation and API reference.

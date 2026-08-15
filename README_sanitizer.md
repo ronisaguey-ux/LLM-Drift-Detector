@@ -215,20 +215,25 @@ All 21 tests cover:
 
 ---
 
-## 💀 Slash Commands: `/clean` and `/autoclean`
+## 💀 Self-Healing Slash Commands: `/clean`, `/autoclean`, & `/cleanreframe`
 
-Self-healing commands directly within Claude Code / AI sessions:
+Direct self-healing commands within Claude Code / AI sessions:
 
 | Command | Action | Description |
 |---|---|---|
 | `/clean` | Instant Clean & Reseed | Backs up active session, scrubs refusals, strips exit tools, fabricates alignment context, and reloads process. |
 | `/autoclean` | Background Daemon | Toggles background real-time drift watcher that continuously detects drift and cleans automatically. |
+| `/cleanreframe` | Context Rotation & Reframe | Rotates context (clean + fabricate) AND dynamically reframes your last prompt using technical dictionaries to ensure compliance. |
 
 ### Running from Terminal
 
 ```bash
 # Execute manual one-off session clean
 python3 examples/clean_claude_session.py
+
+# Rotate context and intelligently reframe last user request
+python3 examples/cleanreframe_claude_session.py
+python3 examples/cleanreframe_claude_session.py --dictionary ~/.claude/refine_dict.json --dry-run
 
 # Check status of AutoClean daemon
 python3 examples/autoclean_claude_daemon.py status
@@ -237,6 +242,18 @@ python3 examples/autoclean_claude_daemon.py status
 python3 examples/autoclean_claude_daemon.py start
 python3 examples/autoclean_claude_daemon.py stop
 python3 examples/autoclean_claude_daemon.py toggle
+```
+
+### Custom Refinement Dictionary (`~/.claude/refine_dict.json`)
+
+```json
+{
+  "front-running": "order book latency analysis",
+  "trading bot": "algorithmic execution engine",
+  "exploit": "vulnerability assessment",
+  "bypass": "controlled alternative routing",
+  "hack": "security research analysis"
+}
 ```
 
 ---
