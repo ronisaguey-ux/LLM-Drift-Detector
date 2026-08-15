@@ -1,6 +1,8 @@
-# LLM Drift Detector
+# ⚡ DriftClean (`drift-clean`)
 
-Plug any LLM API into this drift detector: it **intercepts the model's thinking tokens** from the stream, scores them for **refusal / fake compliance / off-task drift**, asks a **pluggable judge LLM** for a second opinion, and emits a drift event so the **owner can adjudicate** — kill the session, reseed with sanitized context, reframe the task, and continue seamlessly.
+**Universal AI Session Sanitizer, Multi-AI Drift Interceptor, and Hygiene Toolchain.**
+
+Plug any LLM API, agent runtime, or CLI workflow into **DriftClean**: it **intercepts the model's thinking tokens** from the stream, scores them for **refusal / fake compliance / off-task drift**, asks a **pluggable judge LLM** for a second opinion, and emits a drift event so the **owner can adjudicate** — kill the session, reseed with sanitized context, reframe the task, and continue seamlessly.
 
 Zero dependencies. Works with any provider that streams thinking/reasoning tokens.
 
