@@ -285,6 +285,24 @@ test('drift_clean global hook: auto_inject.js loads non-blockingly', () => {
   assert.strictEqual(res.status, 0);
   assert.ok(res.stdout.includes('INJECT_SUCCESS'));
 });
+test('drift_clean auth: validateKnowledgeToken checks token & writes audit log', () => {
+  const { validateKnowledgeToken, getAuditLogPath } = require('../src/drift_clean/auth');
+  const overrides = {
+    knowledgeToken: {
+      knowledgeToken: 'secret-tok-888',
+      knowledgeTokenEnabled: true,
+      knowledgeTokenAudit: true,
+    }
+  };
+  assert.strictEqual(validateKnowledgeToken('wrong', 'caller-1', overrides), false);
+  assert.strictEqual(validateKnowledgeToken('secret-tok-888', 'caller-1', overrides), true);
+
+  const auditPath = getAuditLogPath();
+  assert.ok(fs.existsSync(auditPath));
+  const logData = fs.readFileSync(auditPath, 'utf-8');
+  assert.ok(logData.includes('[DENIED]'));
+  assert.ok(logData.includes('[GRANTED]'));
+});
 
 console.log('\n' + pass + '/' + (pass + fail) + ' passed');
 process.exit(fail ? 1 : 0);

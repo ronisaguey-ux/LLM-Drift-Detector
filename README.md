@@ -199,12 +199,24 @@ clean-any-ai cleanreframe
 /clean
 /autoclean
 /cleanreframe
+
+# Dedicated AGY cleaner
+python3 examples/clean_agy_session.py
 ```
 
 - **Claude Code**: Pinpoints active transcript files in `~/.claude/projects/` via `/proc/<pid>/fd`.
-- **Antigravity (AGY)**: Detects transcript logs in `~/.gemini/antigravity-cli/brain/`.
+- **Antigravity (AGY)**: Detects transcript logs in `~/.gemini/antigravity-cli/brain/` and applies context sanitization.
 - **Webchat API**: Detects active exchanges and reports in `audits_plans/drift_reports/`.
 - **Aider / Generic Runtimes**: Sanitizes `.aider.chat.history.md` and local session JSON/JSONL logs.
+
+### Knowledge Token Access Control (`src/drift_clean/auth.py`)
+
+Restricts unauthorized AI processes from inspecting or modifying drift-clean settings without an authorized token:
+
+- **Token Activation**: Toggle `"knowledgeTokenEnabled": true` in `~/.config/drift-clean/config.json`.
+- **Token Passing**: Pass via `DRIFT_CLEAN_TOKEN` environment variable, `--token` CLI argument, or file at `~/.config/drift-clean/token`.
+- **Silent Denial**: Unauthorized access attempts are silently ignored without revealing the existence of the toolchain.
+- **Audit Logging**: Every access attempt (granted or denied) is logged to `~/.config/drift-clean/audit.log` when `knowledgeTokenAudit: true`.
 
 ## Antigravity-Bridge MCP Server (`src/inbox_mcp/`)
 

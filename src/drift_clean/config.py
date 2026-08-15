@@ -127,8 +127,22 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "slashCommandCleanEnabled": True,
         "slashCommandAutoCleanEnabled": True,
         "slashCommandCleanReframeEnabled": True,
+        "slashCommandAGYEnabled": True,
         "slashCommandHookPath": "",
         "slashCommandBlockLLM": True,
+    },
+    "agy": {
+        "agyBrainPath": "",
+        "agySessionPattern": "^transcript(_full)?\\.jsonl$",
+        "agyAutoDetect": True,
+        "agyRestartOnClean": False,
+    },
+    "knowledgeToken": {
+        "knowledgeToken": "dc-token-7f8a9b0c-1d2e-3f4a-5b6c-7d8e9f0a1b2c",
+        "knowledgeTokenEnabled": False,
+        "knowledgeTokenExpiry": "",
+        "knowledgeTokenScope": [],
+        "knowledgeTokenAudit": True,
     },
     "mcpBridge": {
         "mcpBridgeEnabled": True,

@@ -121,8 +121,22 @@ const DEFAULT_CONFIG = {
     slashCommandCleanEnabled: true,
     slashCommandAutoCleanEnabled: true,
     slashCommandCleanReframeEnabled: true,
+    slashCommandAGYEnabled: true,
     slashCommandHookPath: "",
     slashCommandBlockLLM: true
+  },
+  agy: {
+    agyBrainPath: "",
+    agySessionPattern: "^transcript(_full)?\\.jsonl$",
+    agyAutoDetect: true,
+    agyRestartOnClean: false
+  },
+  knowledgeToken: {
+    knowledgeToken: "dc-token-7f8a9b0c-1d2e-3f4a-5b6c-7d8e9f0a1b2c",
+    knowledgeTokenEnabled: false,
+    knowledgeTokenExpiry: "",
+    knowledgeTokenScope: [],
+    knowledgeTokenAudit: true
   },
   mcpBridge: {
     mcpBridgeEnabled: true,
