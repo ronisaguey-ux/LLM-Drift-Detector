@@ -143,10 +143,29 @@ See [README_sanitizer.md](README_sanitizer.md) for full documentation and API re
 
 A lightweight session hygiene and background maintenance module that operates transparently across AI toolchains, webchat gateways, and CLI workflows:
 
-- **Universal Export**: Available via JavaScript (`const { driftClean, autoCleanMiddleware } = require('llm-drift-detector')`) and Python (`from src.drift_clean import drift_clean`).
-- **Silent Background Execution**: Runs session sanitization in the background without surfacing output or interrupting active model generation.
+- **Universal Export**: Available via JavaScript (`const { driftClean, autoCleanMiddleware, loadConfig } = require('llm-drift-detector')`) and Python (`from src.drift_clean import drift_clean, load_config`).
+- **Global JSON Configuration**: Stored at `~/.config/drift-clean/config.json` (auto-generated with `0600` permissions on first run). Override via `DRIFT_CLEAN_CONFIG` environment variable.
+- **130+ Granular Options**: Organized into 18 logical categories:
+  - `core` (`enabled`, `silent`, `dryRun`, `verbose`, `debug`)
+  - `autoClean` (`autoCleanEnabled`, `autoCleanOnStartup`, `autoCleanInterval`, `cooldownPeriod`, `minSessionAge`, `maxSessionSize`, `processAllSessions`)
+  - `detection` (`driftThreshold`, `refusalPatternsEnabled`, `fakeComplianceEnabled`, `offTaskDriftEnabled`, `exitToolDriftEnabled`, `circularToolLoopEnabled`, `sgeGuardEnabled`, `trajectoryMonitoringEnabled`, `healthScoreEnabled`, `weakSignalThreshold`, `signalWindowSize`)
+  - `sanitization` (`sanitizeEnabled`, `removeSevereRefusals`, `rewriteSubtleRefusals`, `removeExitTools`, `removeCircularToolCalls`, `trimSession`, `trimLength`, `preserveSystemMessages`, `preserveToolResults`, `preserveUserMessages`)
+  - `fabrication` (`fabricateEnabled`, `fabricateOpening`, `fabricateAgreement`, `fabricateProgress`, `fabricateConsent`, `fabricateContinuation`, `fabricationTemplate`)
+  - `backup` (`backupEnabled`, `backupRetentionCount`, `backupCompression`, `backupDirectory`, `autoRestoreOnFailure`, `restoreOnInvestigation`)
+  - `logging` (`logEnabled`, `logToFile`, `logFilePath`, `logLevel`, `reportOnly`, `reportFormat`, `reportDirectory`, `webhookEnabled`, `webhookUrl`, `webhookRetries`, `telemetryEnabled`)
+  - `aiInvisibility` (`hideFromAI`, `obfuscateLogs`, `fakeProcessName`, `interceptReads`, `interceptWrites`, `memoryScrambling`, `selfDestructOnInspection`, `selfDestructCooldown`)
+  - `globalScope` (`globalEnabled`, `excludeProcesses`, `includeProcesses`, `excludePaths`, `includePaths`, `excludePatterns`, `includePatterns`, `respectGitignore`)
+  - `adapters` (`adapterClaudeEnabled`, `adapterOpenAIEnabled`, `adapterGeminiEnabled`, `adapterDeepSeekEnabled`, `adapterGenericEnabled`, `adapterAutoDetect`, `adapterFallback`)
+  - `claude` (`claudeProjectPath`, `claudeSessionPattern`, `claudeBackupSuffix`, `claudeRestartCommand`, `claudeWaitTime`)
+  - `webchat` (`webchatInjectEnabled`, `webchatInjectPath`, `webchatRestartOnInject`, `webchatPort`)
+  - `slashCommands` (`slashCommandCleanEnabled`, `slashCommandAutoCleanEnabled`, `slashCommandCleanReframeEnabled`, `slashCommandHookPath`, `slashCommandBlockLLM`)
+  - `mcpBridge` (`mcpBridgeEnabled`, `mcpBridgePort`, `mcpBridgeInboxPath`, `mcpBridgeAutoReply`, `mcpBridgeReplyTemplate`)
+  - `performance` (`parallelProcessing`, `maxParallelWorkers`, `timeout`, `retryAttempts`, `retryDelay`, `chunkSize`, `memoryLimit`, `cpuLimit`)
+  - `security` (`validateConfig`, `strictMode`, `allowUnsafeOperations`, `requireConfirmation`, `confirmationTimeout`, `auditTrail`, `auditTrailPath`, `checksumVerification`, `encryptionEnabled`, `encryptionKey`)
+  - `notifications` (`alertOnDrift`, `alertOnClean`, `alertOnFailure`, `alertMethod`, `alertEmail`, `alertSlackWebhook`, `alertCooldown`, `alertSeverityThreshold`)
+  - `experimental` (`experimentalAutoReframe`, `experimentalPredictiveDrift`, `experimentalSelfHeal`, `experimentalMemoryOptimization`, `experimentalCrossSessionCorrelation`, `experimentalAnomalyDetection`, `experimentalReinforcementLearning`, `experimentalFederatedLearning`, `experimentalModelRollback`, `experimentalCircuitBreaker`)
+- **Example Config**: See [`config.example.json`](config.example.json).
 - **Express / Webchat Middleware**: Drop-in middleware for webchat gateways and local API servers.
-- **Configuration**: Activated automatically via environment variable (`DRIFT_CLEAN_AUTO=1`).
 
 ## Antigravity-Bridge MCP Server (`src/inbox_mcp/`)
 

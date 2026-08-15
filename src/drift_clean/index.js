@@ -6,21 +6,25 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const { loadConfig, getConfigPath, DEFAULT_CONFIG } = require('./config');
 
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 const PYTHON_CLEAN_SCRIPT = path.join(PROJECT_ROOT, 'examples', 'clean_claude_session.py');
 
 /**
  * Perform transparent background hygiene on a session or active runtime.
- * @param {object} opts
- * @param {string} [opts.sessionPath] Specific session file to clean
- * @param {boolean} [opts.silent=true] Suppress stdout/stderr
- * @param {number} [opts.trim=2000] Message trim limit
+ * @param {object} [opts] Runtime overrides
  * @returns {Promise<boolean>}
  */
 function driftClean(opts = {}) {
-  const silent = opts.silent !== false;
-  const trim = opts.trim != null ? opts.trim : 2000;
+  const config = loadConfig(opts);
+
+  if (config.enabled === false || config.core?.enabled === false) {
+    return Promise.resolve(false);
+  }
+
+  const silent = config.silent !== false && !config.verbose && !config.debug;
+  const trim = config.trimSession ? (config.trimLength || 2000) : 0;
 
   return new Promise((resolve) => {
     try {
@@ -28,12 +32,24 @@ function driftClean(opts = {}) {
         return resolve(false);
       }
 
-      const args = [PYTHON_CLEAN_SCRIPT, '--trim', String(trim)];
+      const args = [PYTHON_CLEAN_SCRIPT];
+      if (trim > 0) {
+        args.push('--trim', String(trim));
+      } else {
+        args.push('--trim', '0');
+      }
+
       if (opts.sessionPath) {
         args.push('--session', String(opts.sessionPath));
       }
-      if (opts.noRestart) {
+      if (opts.noRestart || config.autoClean?.processAllSessions) {
         args.push('--no-restart');
+      }
+      if (config.dryRun) {
+        args.push('--dry-run');
+      }
+      if (config.verbose || config.debug) {
+        args.push('--verbose');
       }
 
       const child = spawn('python3', args, {
@@ -55,7 +71,8 @@ function driftClean(opts = {}) {
  */
 function autoCleanMiddleware(opts = {}) {
   return function (req, res, next) {
-    if (process.env.DRIFT_CLEAN_AUTO === '1' || process.env.DRIFT_CLEAN_AUTO === 'true') {
+    const config = loadConfig(opts);
+    if (config.autoCleanEnabled || process.env.DRIFT_CLEAN_AUTO === '1' || process.env.DRIFT_CLEAN_AUTO === 'true') {
       driftClean({ ...opts, silent: true }).catch(() => {});
     }
     next();
@@ -64,5 +81,8 @@ function autoCleanMiddleware(opts = {}) {
 
 module.exports = {
   driftClean,
-  autoCleanMiddleware
+  autoCleanMiddleware,
+  loadConfig,
+  getConfigPath,
+  DEFAULT_CONFIG
 };

@@ -1,5 +1,8 @@
 // run-tests.js — zero-dep test runner. Run: npm test  (or node test/run-tests.js)
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 const { checkDrift } = require('../src/score.js');
 const { builtins, resolveAdapter } = require('../src/adapters.js');
 const { extractVerdict, JUDGE_SYSTEM } = require('../src/judge.js');
@@ -241,6 +244,36 @@ test('drift_clean: exports driftClean and autoCleanMiddleware', async () => {
   assert.strictEqual(typeof autoCleanMiddleware, 'function');
   const res = await driftClean({ silent: true, noRestart: true });
   assert.strictEqual(typeof res, 'boolean');
+});
+test('drift_clean config: loads defaults, overrides, and verifies 600 permissions', () => {
+  const { loadConfig, getConfigPath } = require('../src/drift_clean/config');
+  const cfg = loadConfig({ dryRun: true, trimLength: 500 });
+  assert.strictEqual(cfg.enabled, true);
+  assert.strictEqual(cfg.dryRun, true);
+  assert.strictEqual(cfg.trimLength, 500);
+  assert.strictEqual(cfg.hideFromAI, true);
+  assert.strictEqual(cfg.sanitization.preserveSystemMessages, true);
+  assert.strictEqual(cfg.autoClean.autoCleanInterval, 60);
+
+  const cfgPath = getConfigPath();
+  assert.ok(fs.existsSync(cfgPath));
+  const stats = fs.statSync(cfgPath);
+  const mode = stats.mode & 0o777;
+  assert.strictEqual(mode, 0o600, 'Config must have 0600 permissions');
+});
+test('drift_clean config: DRIFT_CLEAN_CONFIG env override', () => {
+  const { loadConfig } = require('../src/drift_clean/config');
+  const tempPath = path.join(os.tmpdir(), `test_drift_cfg_${Date.now()}.json`);
+  fs.writeFileSync(tempPath, JSON.stringify({ core: { enabled: false } }), { mode: 0o600 });
+  
+  process.env.DRIFT_CLEAN_CONFIG = tempPath;
+  try {
+    const cfg = loadConfig();
+    assert.strictEqual(cfg.enabled, false);
+  } finally {
+    delete process.env.DRIFT_CLEAN_CONFIG;
+    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+  }
 });
 
 console.log('\n' + pass + '/' + (pass + fail) + ' passed');

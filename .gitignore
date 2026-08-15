@@ -4,3 +4,6 @@ node_modules/
 __pycache__/
 *.pyc
 .pytest_cache/
+*.bak
+config.json
+.config/

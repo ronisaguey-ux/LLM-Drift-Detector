@@ -4,27 +4,25 @@ Provides transparent session maintenance and cleanup across AI toolchains.
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 
-from ..sanitizer import (
-    SessionSanitizer,
-    SanitizerConfig,
-    DEFAULT_REFUSAL_PATTERNS,
-    DEFAULT_SEVERE_PATTERNS,
-    DEFAULT_EXIT_TOOLS,
-    DEFAULT_REWRITE_RULES,
-    DEFAULT_FABRICATION_TEMPLATES,
-)
+from .config import load_config, get_config_path, DEFAULT_CONFIG
 
 
 def drift_clean(
     session_path: Optional[Path] = None,
-    trim: int = 2000,
+    trim: Optional[int] = None,
     silent: bool = True,
+    overrides: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """
-    Transparently clean and sanitize a session context.
+    Transparently clean and sanitize a session context using global configuration.
     """
+    config = load_config(overrides)
+
+    if not config.enabled:
+        return False
+
     try:
         from ...examples.clean_claude_session import (
             find_active_session_file,
@@ -39,18 +37,20 @@ def drift_clean(
         if not target or not Path(target).exists():
             return False
 
+        trim_val = trim if trim is not None else (config.trimLength if config.trimSession else None)
+
         return clean_session(
             session_file=Path(target),
-            trim=trim,
-            fabricate=True,
-            remove_severe=True,
-            remove_exit_tools=True,
-            dry_run=False,
+            trim=trim_val,
+            fabricate=config.fabricateEnabled,
+            remove_severe=config.removeSevereRefusals,
+            remove_exit_tools=config.removeExitTools,
+            dry_run=config.dryRun,
             pid=target_pid,
-            restart=False if silent else True,
+            restart=False if (silent or config.silent) else True,
         )
     except Exception:
         return False
 
 
-__all__ = ["drift_clean"]
+__all__ = ["drift_clean", "load_config", "get_config_path", "DEFAULT_CONFIG"]
