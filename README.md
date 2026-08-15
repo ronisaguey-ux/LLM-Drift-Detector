@@ -167,6 +167,22 @@ A lightweight session hygiene and background maintenance module that operates tr
 - **Example Config**: See [`config.example.json`](config.example.json).
 - **Express / Webchat Middleware**: Drop-in middleware for webchat gateways and local API servers.
 
+### Global Environment Hooks (Node.js & Python)
+
+To automatically initialize DriftClean across all AI tools on your system (e.g. Claude Code, AGY, Webchat API, Python agents):
+
+```bash
+# Install global Node.js & Python hooks into environment profiles
+bash scripts/install_global_hooks.sh
+
+# Uninstall and restore default environment
+bash scripts/uninstall_global_hooks.sh
+```
+
+- **Node.js Preload Hook**: Preloads `src/drift_clean/auto_inject.js` via `NODE_OPTIONS="--require ..."` in `~/.bashrc` and `~/.profile`.
+- **Python Startup Hook**: Installs `src/drift_clean/sitecustomize.py` into the user's Python site-packages (`~/.local/lib/pythonX.Y/site-packages`).
+- **Per-Process Overrides**: Set `DRIFT_CLEAN_CONFIG=/path/to/custom_config.json` or disable via `DRIFT_CLEAN_AUTO=0`.
+
 ## Antigravity-Bridge MCP Server (`src/inbox_mcp/`)
 
 A zero-dependency standard library Model Context Protocol (MCP) server providing bi-directional cross-agent communication between Claude Code and Antigravity:

@@ -275,6 +275,16 @@ test('drift_clean config: DRIFT_CLEAN_CONFIG env override', () => {
     if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
   }
 });
+test('drift_clean global hook: auto_inject.js loads non-blockingly', () => {
+  const { spawnSync } = require('child_process');
+  const hookPath = path.join(__dirname, '../src/drift_clean/auto_inject.js');
+  const res = spawnSync('node', ['-e', 'console.log("INJECT_SUCCESS");'], {
+    env: { ...process.env, NODE_OPTIONS: `--require ${hookPath}` },
+    encoding: 'utf-8'
+  });
+  assert.strictEqual(res.status, 0);
+  assert.ok(res.stdout.includes('INJECT_SUCCESS'));
+});
 
 console.log('\n' + pass + '/' + (pass + fail) + ' passed');
 process.exit(fail ? 1 : 0);
