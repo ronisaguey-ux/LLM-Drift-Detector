@@ -12,9 +12,18 @@ import argparse
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 
-from .config import load_config
-from ..sanitizer.core import SessionSanitizer
-from ..sanitizer.config import SanitizerConfig
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+try:
+    from .config import load_config
+    from ..sanitizer.core import SessionSanitizer
+    from ..sanitizer.config import SanitizerConfig
+except ImportError:
+    from src.drift_clean.config import load_config
+    from src.sanitizer.core import SessionSanitizer
+    from src.sanitizer.config import SanitizerConfig
 
 
 def discover_claude_sessions() -> List[Tuple[Optional[int], Path]]:
@@ -142,6 +151,22 @@ def clean_any_ai(
         # Sort targets by mtime descending and pick the most recent active session
         targets = [max(targets, key=lambda t: t[2].stat().st_mtime if t[2].exists() else 0)]
 
+    if action == "autoclean":
+        import subprocess
+        daemon_script = PROJECT_ROOT / "examples" / "autoclean_claude_daemon.py"
+        extra = overrides.get("extra_args", []) if overrides else []
+        cmd = [sys.executable, str(daemon_script)] + extra
+        res = subprocess.run(cmd)
+        return res.returncode == 0
+
+    if action == "cleanreframe":
+        import subprocess
+        reframe_script = PROJECT_ROOT / "examples" / "cleanreframe_claude_session.py"
+        extra = overrides.get("extra_args", []) if overrides else []
+        cmd = [sys.executable, str(reframe_script)] + extra
+        res = subprocess.run(cmd)
+        return res.returncode == 0
+
     sanitizer_cfg = SanitizerConfig(
         trim=config.trimLength if config.trimSession else None,
         fabricate=config.fabricateEnabled,
@@ -187,6 +212,7 @@ def clean_any_ai(
 def main():
     parser = argparse.ArgumentParser(description="Universal Multi-AI Session Cleaner")
     parser.add_argument("action", nargs="?", default="clean", choices=["clean", "autoclean", "cleanreframe"])
+    parser.add_argument("extra_args", nargs="*", help="Extra arguments passed to subcommands")
     parser.add_argument("--all", action="store_true", help="Process all detected AI sessions")
     parser.add_argument("--session", type=Path, help="Explicit session file path")
     parser.add_argument("--dry-run", action="store_true", help="Simulate without writing")
@@ -199,6 +225,8 @@ def main():
     if args.verbose:
         overrides["verbose"] = True
         overrides["silent"] = False
+    if args.extra_args:
+        overrides["extra_args"] = args.extra_args
 
     success = clean_any_ai(
         action=args.action,
