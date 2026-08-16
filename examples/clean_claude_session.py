@@ -279,6 +279,11 @@ def main() -> None:
         help="Keep exit tool invocations in message history.",
     )
     parser.add_argument(
+        "--restart",
+        action="store_true",
+        help="Explicitly restart/kill Claude process after sanitization (default: false).",
+    )
+    parser.add_argument(
         "--no-restart",
         action="store_true",
         help="Do not restart or kill Claude process after sanitization.",
@@ -317,6 +322,7 @@ def main() -> None:
         sys.exit(1)
 
     trim_val = None if args.trim == 0 else args.trim
+    should_restart = bool(args.restart and not args.no_restart)
 
     success = clean_session(
         session_file=session_path,
@@ -326,7 +332,7 @@ def main() -> None:
         remove_exit_tools=not args.keep_exit_tools,
         dry_run=args.dry_run,
         pid=target_pid,
-        restart=not args.no_restart,
+        restart=should_restart,
     )
 
     sys.exit(0 if success else 1)

@@ -42,7 +42,7 @@ function driftClean(opts = {}) {
       if (opts.sessionPath) {
         args.push('--session', String(opts.sessionPath));
       }
-      if (opts.noRestart || config.autoClean?.processAllSessions) {
+      if (!opts.restart) {
         args.push('--no-restart');
       }
       if (config.dryRun) {

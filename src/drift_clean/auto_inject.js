@@ -11,9 +11,9 @@
     }
     process.env.__DRIFT_CLEAN_NODE_INIT = '1';
 
-    // Skip build tools and package managers to minimize overhead
+    // Skip build tools, package managers, and Claude Code to prevent recursive termination loops
     const scriptPath = process.argv[1] || '';
-    if (/(\/|\\)(npm|npx|yarn|pnpm|bun|esbuild|webpack|tsc)(\.js)?$/i.test(scriptPath)) {
+    if (/(\/|\\)(npm|npx|yarn|pnpm|bun|esbuild|webpack|tsc|claude)(\.js)?$/i.test(scriptPath) || process.argv.some(a => String(a).includes('claude'))) {
       return;
     }
 
